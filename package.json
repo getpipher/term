@@ -2,51 +2,20 @@
   "name": "@getpipher/term",
   "version": "0.1.0",
   "description": "Programmatic tmux driver for the pi coding agent — spawn/drive a tmux session (send-keys, capture-pane, wait-for-pattern/quiet, resize, kill) for autonomous TUI QA. tmux-only v0.1; lib + pi extension.",
-  "keywords": [
-    "pi-package",
-    "pi-extension",
-    "tmux",
-    "programmatic-terminal",
-    "qa",
-    "automation",
-    "tui",
-    "testing"
-  ],
+  "keywords": ["pi-package", "pi-extension", "tmux", "programmatic-terminal", "qa", "automation", "tui", "testing"],
   "license": "MIT",
   "author": "RECTOR <rector@rectorspace.com>",
   "homepage": "https://github.com/getpipher/term",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/getpipher/term.git"
-  },
-  "bugs": {
-    "url": "https://github.com/getpipher/term/issues"
-  },
+  "repository": { "type": "git", "url": "https://github.com/getpipher/term.git" },
+  "bugs": { "url": "https://github.com/getpipher/term/issues" },
   "type": "module",
-  "engines": {
-    "node": ">=20"
-  },
-  "pi": {
-    "extensions": [
-      "./extensions/term.ts"
-    ]
-  },
-  "files": [
-    "extensions",
-    "lib",
-    "README.md",
-    "LICENSE"
-  ],
-  "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "tsx --test",
-    "test:run": "tsx --test"
-  },
-  "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
-    "typebox": "*"
-  },
+  "engines": { "node": ">=20" },
+  "pi": { "extensions": ["./extensions/term.ts"] },
+  "files": ["extensions", "lib", "README.md", "LICENSE"],
+  "scripts": { "typecheck": "tsc --noEmit", "test": "tsx --test", "test:run": "tsx --test" },
+  "peerDependencies": { "@earendil-works/pi-coding-agent": "*", "typebox": "*" },
   "devDependencies": {
+    "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*",
     "@types/node": "^22.0.0",
     "typebox": "*",

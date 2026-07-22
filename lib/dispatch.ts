@@ -27,17 +27,23 @@ export interface TermError {
 }
 
 function compilePattern(s: string): RegExp | TermError {
-  const m = s.match(/^\/(.+)\/([gimsuy]*)$/);
   try {
-    return m ? new RegExp(m[1], m[2]) : new RegExp(s);
+    const m = s.match(/^\/(.+)\/([gimsuy]*)$/);
+    if (m) {
+      const pat = m[1] ?? "";
+      const flags = m[2] ?? "";
+      return new RegExp(pat, flags);
+    }
+    return new RegExp(s);
   } catch (e) {
     return { error: "INVALID_PATTERN", message: (e as Error).message };
   }
 }
 
-export async function dispatchAction(
-  input: TermInput,
-): Promise<Record<string, unknown>> {
+// Returns a plain value at the dispatch boundary so structured results
+// (CaptureResult) and plain {ok}/{error} objects all flow through. The pi glue
+// JSON-serializes this; tests cast as needed.
+export async function dispatchAction(input: TermInput): Promise<unknown> {
   switch (input.action) {
     case "spawn":
       return await tmux.spawn(input.spawn);

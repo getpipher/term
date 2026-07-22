@@ -13,7 +13,7 @@
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": true,
     "noUncheckedIndexedAccess": true,
-    "types": []
+    "types": ["node"]
   },
   "include": ["extensions/**/*.ts", "lib/**/*.ts", "tests/**/*.ts"],
   "exclude": ["node_modules", "dist"]

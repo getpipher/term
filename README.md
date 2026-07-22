@@ -1,6 +1,6 @@
 # @getpipher/term
 
-> **Status:** v0.0.0 (spec stage — not yet implemented). See
+> **Status:** v0.1.0 (shipped). See
 > [`docs/superpowers/specs/2026-07-22-term-design.md`](docs/superpowers/specs/2026-07-22-term-design.md).
 
 A focused **programmatic tmux driver** for the pi coding agent — spawn/drive a

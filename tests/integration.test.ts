@@ -21,9 +21,9 @@ test("integration: spawn a real tmux, send 'hello\\r', capture, kill", {
     return;
   }
   // Real exec (not a mock) — drives a genuine tmux server.
-  tmux.setExec(async (args) => {
+  tmux.setExec(async (args: string[]) => {
     const { spawn } = await import("node:child_process");
-    return new Promise((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
       const p = spawn("tmux", args, { stdio: ["ignore", "pipe", "pipe"] });
       let out = "";
       p.stdout.on("data", (d) => { out += d; });

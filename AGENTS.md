@@ -8,8 +8,7 @@ QA. See `docs/superpowers/specs/2026-07-22-term-design.md` for the full design.
 
 ## Status
 
-- **v0.0.0** — spec stage (2026-07-22). Repo scaffolded; spec committed; no
-  implementation yet. Implementation plan to follow via writing-plans.
+- **v0.1.0** — shipped (2026-07-22). Implementation complete; CI publishes on v0.1.0 tag.
 
 ## Conventions (inherited from ~/local-dev/getpipher/AGENTS.md)
 

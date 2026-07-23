@@ -63,9 +63,12 @@ await term.kill(pane);
   change from v0.1.0's embedded-escape `keys`.)
 - **v0.1.0** — tmux-only, async function API, 9-action tool, structured
   capture, pattern+quiet waitFor, lease lifecycle.
+- **v0.3.0** — `{ throws: false }` opt-out: `waitFor`/`waitForQuiet` return a
+  `WaitForResult` union (`{ ok: true, result } | { ok: false, error }`) instead
+  of throwing on timeout. Default `throws: true` is unchanged. Lib API only.
 - **v0.3+** (planned, grounded in usage) — declarative `run(steps)` DSL,
-  `{ throws: false }` opt-out, `TerminalDriver` interface (when a 2nd backend
-  is real), composite `sendAndCapture` if usage justifies.
+  `TerminalDriver` interface (when a 2nd backend is real), composite
+  `sendAndCapture` if usage justifies.
 
 ## License
 

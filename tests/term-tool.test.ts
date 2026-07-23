@@ -23,8 +23,8 @@ test("tool: spawn → {pane, session}", async () => {
   assert.ok(String((r as { session: string }).session).startsWith("pi-term-"));
 });
 
-test("tool: send → {ok:true}", async () => {
-  const r = await dispatchAction({ action: "send", pane: "%5", keys: "hi\r" });
+test("tool: send → {ok:true} (v0.2.0: keys is literal)", async () => {
+  const r = await dispatchAction({ action: "send", pane: "%5", keys: "hi" });
   assert.deepEqual(r, { ok: true });
   assert.deepEqual(calls[0], ["send-keys", "-t", "%5", "-l", "hi"]);
 });

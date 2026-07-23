@@ -18,7 +18,7 @@ async function defaultTmuxExec(args: string[]): Promise<string> {
   });
 }
 
-// --- sendKey name map --------------------------------------------------------
+// --- sendKey name map (the "second button" — named special keys) -------------
 const NAMED_KEY_TO_TMUX: Record<NamedKey, string> = {
   "Enter": "Enter", "Escape": "Escape", "Tab": "Tab", "Space": "Space", "BS": "BS",
   "Up": "Up", "Down": "Down", "Left": "Left", "Right": "Right",
@@ -26,63 +26,15 @@ const NAMED_KEY_TO_TMUX: Record<NamedKey, string> = {
   "F1": "F1", "F2": "F2", "F3": "F3", "F4": "F4",
 };
 
-// --- parseKeys tokenizer -----------------------------------------------------
-export type KeyToken =
-  | { kind: "literal"; text: string }
-  | { kind: "key"; name: string };
-
-const ESCAPE_TO_KEY: { seq: string; name: string }[] = [
-  { seq: "\x1b[A", name: "Up" },
-  { seq: "\x1b[B", name: "Down" },
-  { seq: "\x1b[C", name: "Right" },
-  { seq: "\x1b[D", name: "Left" },
-  { seq: "\x1bOP", name: "F1" },
-  { seq: "\x1bOQ", name: "F2" },
-  { seq: "\x1bOR", name: "F3" },
-  { seq: "\x1bOS", name: "F4" },
-  { seq: "\r", name: "Enter" },
-  { seq: "\n", name: "Enter" },
-  { seq: "\t", name: "Tab" },
-  { seq: "\x7f", name: "BS" },
-  { seq: "\x1b", name: "Escape" },
-  { seq: "\x03", name: "C-c" },
-  { seq: "\x04", name: "C-d" },
-  { seq: "\x1a", name: "C-z" },
-  { seq: "\x1c", name: "C-\\" },
-];
-
-export function parseKeys(s: string): KeyToken[] {
-  const tokens: KeyToken[] = [];
-  let i = 0;
-  let literal = "";
-  while (i < s.length) {
-    let matched: { name: string; len: number } | undefined;
-    for (const e of ESCAPE_TO_KEY) {
-      if (s.startsWith(e.seq, i)) { matched = { name: e.name, len: e.seq.length }; break; }
-    }
-    if (matched) {
-      if (literal) { tokens.push({ kind: "literal", text: literal }); literal = ""; }
-      tokens.push({ kind: "key", name: matched.name });
-      i += matched.len;
-    } else {
-      literal += s[i];
-      i += 1;
-    }
-  }
-  if (literal) tokens.push({ kind: "literal", text: literal });
-  return tokens;
-}
-
-// --- sendKeys / sendKey ------------------------------------------------------
+// --- sendKeys: PURE LITERAL (v0.2.0) -----------------------------------------
+// Types exactly the characters given — no escape interpretation. To press a
+// special key (Enter, Esc, arrows, C-c, …) use the `sendKey` action. The v0.1.0
+// `parseKeys` tokenizer was removed: its textual-escape handling (e.g. an
+// agent sending "/todo\r" as the two letters \r) did not match the raw-byte
+// mapping the impl actually did. `keys` is now unambiguous literal text.
 export async function sendKeys(pane: Pane, keys: string): Promise<void> {
-  const tokens = parseKeys(keys);
-  for (const t of tokens) {
-    if (t.kind === "literal") {
-      await exec(["send-keys", "-t", pane, "-l", t.text]);
-    } else {
-      await exec(["send-keys", "-t", pane, t.name]);
-    }
-  }
+  if (keys.length === 0) return; // no-op on empty input
+  await exec(["send-keys", "-t", pane, "-l", keys]);
 }
 
 export async function sendKey(pane: Pane, key: NamedKey): Promise<void> {
@@ -150,21 +102,16 @@ export async function resize(pane: Pane, width: number, height: number): Promise
 
 export async function kill(pane: Pane): Promise<void> {
   const session = lifecycle.getSession(pane);
-  if (!session) return; // never-kill-attached: attached pane → no-op
+  if (!session) return; // never-kill-attached
   await exec(["kill-session", "-t", session]);
   lifecycle.unregister(pane);
 }
 
 // --- waitFor / waitForQuiet -------------------------------------------------
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
+function sleep(ms: number): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
 function hash(s: string): string {
   let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  }
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
   return String(h);
 }
 
@@ -183,13 +130,8 @@ async function poll(
     await sleep(interval);
     const cur = await capture(pane);
     const curHash = hash(cur.text);
-    if (curHash === lastHash) {
-      stableFor += interval;
-    } else {
-      stableFor = 0;
-    }
-    last = cur;
-    lastHash = curHash;
+    if (curHash === lastHash) stableFor += interval; else stableFor = 0;
+    last = cur; lastHash = curHash;
     if (done(cur, stableFor)) {
       if (lifecycle.isSpawned(pane)) lifecycle.recordActivity(pane);
       return cur;
@@ -198,33 +140,16 @@ async function poll(
   throw new TermTimeoutError(pane, Date.now() - start, opts.timeout, pattern, last);
 }
 
-export async function waitFor(
-  pane: Pane,
-  pattern: RegExp,
-  opts: WaitForOptions,
-): Promise<CaptureResult> {
+export async function waitFor(pane: Pane, pattern: RegExp, opts: WaitForOptions): Promise<CaptureResult> {
   const quietMs = opts.quietMs ?? 0;
   const textOf = (c: CaptureResult) => (opts.ansi ? c.ansi ?? c.text : c.text);
-  return poll(
-    pane,
-    opts,
-    (cur, stableFor) => {
-      if (!pattern.test(textOf(cur))) return false;
-      if (quietMs === 0) return true;
-      return stableFor >= quietMs;
-    },
-    pattern,
-  );
+  return poll(pane, opts, (cur, stableFor) => {
+    if (!pattern.test(textOf(cur))) return false;
+    if (quietMs === 0) return true;
+    return stableFor >= quietMs;
+  }, pattern);
 }
 
-export async function waitForQuiet(
-  pane: Pane,
-  opts: WaitForQuietOptions,
-): Promise<CaptureResult> {
-  return poll(
-    pane,
-    opts,
-    (_cur, stableFor) => stableFor >= opts.ms,
-    undefined,
-  );
+export async function waitForQuiet(pane: Pane, opts: WaitForQuietOptions): Promise<CaptureResult> {
+  return poll(pane, opts, (_cur, stableFor) => stableFor >= opts.ms, undefined);
 }

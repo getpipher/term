@@ -235,7 +235,7 @@ Single tool `term` with `action` enum; each action's params mirror the lib signa
 
 `pattern` in `waitFor` is a `string` (JSON-safe) → compiled to `RegExp` in the extension before calling the lib. Pattern syntax: `/regex/flags` or a bare `regex` (defaults to no flags). The extension validates via `RegExp` constructor; invalid patterns return a typed error (not a throw into the agent loop).
 
-**getpither UX convention:** the tool action is the agent-primary surface. v0.1 ships no `/term` slash and no panel — the agent composes actions. A human interactive surface (panel/scoped `/term` subs) is a later consideration, not v0.1.
+**getpipher UX convention:** the tool action is the agent-primary surface. v0.1 ships no `/term` slash and no panel — the agent composes actions. A human interactive surface (panel/scoped `/term` subs) is a later consideration, not v0.1.
 
 ## 11. Exec seam (testability)
 
@@ -253,7 +253,7 @@ export type ExecFn = (args: string[]) => Promise<string>;  // returns stdout
 
 ```
 term/
-├── AGENTS.md                  # satellite context (getpither convention)
+├── AGENTS.md                  # satellite context (getpipher convention)
 ├── README.md
 ├── LICENSE                    # MIT
 ├── package.json               # @getpipher/term, no build, tsx runtime
@@ -276,7 +276,7 @@ term/
 
 ## 13. Testing
 
-- **Stack:** `tsx` + `node:test` + `node:assert/strict` (NOT vitest) — matches every sibling getpither package. `pnpm typecheck` + `pnpm test:run` green; 80%+ coverage on new code.
+- **Stack:** `tsx` + `node:test` + `node:assert/strict` (NOT vitest) — matches every sibling getpipher package. `pnpm typecheck` + `pnpm test:run` green; 80%+ coverage on new code.
 - **Unit (mocked exec):**
   - `spawn` builds the right `tmux new-session -d -s pi-term-... -x 120 -y 40 -n pi-term <cmd>` arg array; registers with lifecycle; returns `{pane, session}`.
   - `sendKeys` / `parseKeys`: `"/todo\r"` → `['send-keys','-t',pane,'-l','/todo']` + `['send-keys','-t',pane,'Enter']`; `"\x1b[A"` → Up; `"\x03"` → C-c; pure literal `"hello"` → one `-l` call.
@@ -285,12 +285,12 @@ term/
   - `waitFor`: resolves when pattern matches + (with `quietMs`) pane stable for `quietMs`; throws `TermTimeoutError` with `lastCapture` on timeout.
   - `waitForQuiet`: resolves on quiet; throws on timeout.
   - `lifecycle`: `register` adds entry; `recordActivity` updates `lastActivity`; `reapExpired` reaps only entries past lease; `kill` on attached (unregistered) = no-op; exit handler reaps all spawned.
-- **Integration (real tmux):** a gated test (`test:run:integration` or a skip-when-no-tmux guard) that spawns a real tmux session running `printf 'hello\r'; sleep 0.1`, captures, asserts `text` contains `hello`, kills. This is the smoke that catches the **mock-proves-my-assumption** anti-pattern flagged in the getpither AGENTS gotchas (the v0.2.1 cursor crash). Skipped if `tmux` not on PATH or `TERM` unset.
+- **Integration (real tmux):** a gated test (`test:run:integration` or a skip-when-no-tmux guard) that spawns a real tmux session running `printf 'hello\r'; sleep 0.1`, captures, asserts `text` contains `hello`, kills. This is the smoke that catches the **mock-proves-my-assumption** anti-pattern flagged in the getpipher AGENTS gotchas (the v0.2.1 cursor crash). Skipped if `tmux` not on PATH or `TERM` unset.
 
 ## 14. Package & release
 
 - **npm:** `@getpipher/term`, account `rz1989`, published by `release.yml` on `v*` tag. No build step — ships raw `.ts` run via tsx.
-- **Org secret verified (2026-07-22):** `NPM_TOKEN` exists at the **getpipher org level**, visibility `ALL` (inherited by every repo in the org), granular npm token scoped to `@getpither` with Bypass 2FA (no OTP). No per-repo secret setup required.
+- **Org secret verified (2026-07-22):** `NPM_TOKEN` exists at the **getpipher org level**, visibility `ALL` (inherited by every repo in the org), granular npm token scoped to `@getpipher` with Bypass 2FA (no OTP). No per-repo secret setup required.
 - **`release.yml`** = cursor/vision shape (pnpm, node 20, `typecheck` + `test:run` gates, idempotent npm publish via `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}`) **+** armory-todo's GitHub-Release step (`gh release create --generate-notes`, idempotent via `gh release view` guard, `GH_TOKEN: ${{ github.token }}`). `permissions: contents: write` (needed for `gh release create`). Both steps idempotent — safe to re-run.
 - **`~/.pi/agent/settings.json`:** add `npm:@getpipher/term` to `packages` after first release; `/reload` or restart pi.
 - **Version:** v0.1.0 first release. Branch `feat/v0.1.0`.

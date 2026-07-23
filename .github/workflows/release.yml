@@ -2,7 +2,7 @@ name: Release
 
 # Publishes @getpipher/term to npm on tag push (v*) AND creates a GitHub
 # Release (auto-generated notes). Uses the getpipher org secret NPM_TOKEN
-# (granular npm token, Read-and-write, scoped to @getpither, with
+# (granular npm token, Read-and-write, scoped to @getpipher, with
 # "Bypass 2FA" — no OTP needed). Inherited by all getpipher repos.
 #   gh secret set NPM_TOKEN --org getpipher
 # The GitHub Release step uses the auto-provided github.token (no secret).

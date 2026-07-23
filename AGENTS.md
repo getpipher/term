@@ -45,5 +45,5 @@ QA. See `docs/superpowers/specs/2026-07-22-term-design.md` for the full design.
 
 Single `term` tool, 9 actions: `spawn | attach | send | sendKey | capture |
 waitFor | waitForQuiet | resize | kill`. 1:1 with the lib. No `/term` slash,
-no panel in v0.1 — the agent composes actions (getpither UX convention: tool
+no panel in v0.1 — the agent composes actions (getpipher UX convention: tool
 action = agent-primary).

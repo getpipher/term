@@ -42,3 +42,36 @@ test("integration: spawn a real tmux, send 'hello\\r', capture, kill", {
     await tmux.kill(pane);
   }
 });
+
+test("integration: { throws: false } waitFor returns { ok: true, result } on a live pane", {
+  skip: !TMUX_AVAILABLE,
+}, async (t) => {
+  let tmux: typeof import("../lib/tmux.ts");
+  try {
+    tmux = await import("../lib/tmux.ts");
+  } catch (e) {
+    t.skip(`lib/tmux.ts not resolvable in this run: ${(e as Error).message}`);
+    return;
+  }
+  tmux.setExec(async (args) => {
+    const { spawn } = await import("node:child_process");
+    return new Promise((resolve, reject) => {
+      const p = spawn("tmux", args, { stdio: ["ignore", "pipe", "pipe"] });
+      let out = "";
+      p.stdout.on("data", (d) => { out += d; });
+      p.on("close", (c) => (c === 0 ? resolve(out) : reject(new Error(`tmux ${args.join(" ")} exited ${c}`))));
+      p.on("error", reject);
+    });
+  });
+  const { pane } = await tmux.spawn({
+    command: "sh", args: ["-c", "printf 'hi\\r'; sleep 0.3"],
+    height: 10, width: 40, windowName: "int-tf",
+  });
+  try {
+    const r = await tmux.waitFor(pane, /hi/, { timeout: 3000, interval: 50, throws: false });
+    assert.equal(r.ok, true);
+    if (r.ok) assert.match(r.result.text, /hi/);
+  } finally {
+    await tmux.kill(pane);
+  }
+});

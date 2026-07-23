@@ -1,4 +1,4 @@
-import type { Pane, NamedKey, CaptureResult, SpawnSpec, WaitForOptions, WaitForQuietOptions } from "./types.ts";
+import type { Pane, NamedKey, CaptureResult, SpawnSpec, WaitForOptions, WaitForQuietOptions, WaitForResult } from "./types.ts";
 import { TermTimeoutError } from "./error.ts";
 import * as lifecycle from "./lifecycle.ts";
 
@@ -108,6 +108,14 @@ export async function kill(pane: Pane): Promise<void> {
 }
 
 // --- waitFor / waitForQuiet -------------------------------------------------
+// poll() is a PURE function — it never throws. It returns a WaitForResult:
+// { ok: true, result } on settle, or { ok: false, error } on timeout. The
+// public waitFor/waitForQuiet wrappers own the throw/return policy at the API
+// boundary: throws:true (default) throws r.error; throws:false returns r.
+//
+// Overloads keep back-compat: the default (throws:true / omitted) still types
+// as CaptureResult so existing `r.text` callers are unaffected; only the
+// literal `{ throws: false }` call types as WaitForResult.
 function sleep(ms: number): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
 function hash(s: string): string {
   let h = 0;
@@ -120,7 +128,7 @@ async function poll(
   opts: { timeout: number; interval?: number },
   done: (last: CaptureResult, stableFor: number) => boolean,
   pattern: RegExp | undefined,
-): Promise<CaptureResult> {
+): Promise<WaitForResult> {
   const interval = opts.interval ?? 50;
   const start = Date.now();
   let last: CaptureResult = await capture(pane);
@@ -134,22 +142,36 @@ async function poll(
     last = cur; lastHash = curHash;
     if (done(cur, stableFor)) {
       if (lifecycle.isSpawned(pane)) lifecycle.recordActivity(pane);
-      return cur;
+      return { ok: true, result: cur };
     }
   }
-  throw new TermTimeoutError(pane, Date.now() - start, opts.timeout, pattern, last);
+  return { ok: false, error: new TermTimeoutError(pane, Date.now() - start, opts.timeout, pattern, last) };
 }
 
-export async function waitFor(pane: Pane, pattern: RegExp, opts: WaitForOptions): Promise<CaptureResult> {
+export async function waitFor(pane: Pane, pattern: RegExp, opts: WaitForOptions & { throws: false }): Promise<WaitForResult>;
+export async function waitFor(pane: Pane, pattern: RegExp, opts: WaitForOptions): Promise<CaptureResult>;
+export async function waitFor(
+  pane: Pane, pattern: RegExp, opts: WaitForOptions,
+): Promise<CaptureResult | WaitForResult> {
   const quietMs = opts.quietMs ?? 0;
   const textOf = (c: CaptureResult) => (opts.ansi ? c.ansi ?? c.text : c.text);
-  return poll(pane, opts, (cur, stableFor) => {
+  const r = await poll(pane, opts, (cur, stableFor) => {
     if (!pattern.test(textOf(cur))) return false;
     if (quietMs === 0) return true;
     return stableFor >= quietMs;
   }, pattern);
+  if (r.ok) return opts.throws === false ? r : r.result;
+  if (opts.throws === false) return r;   // { ok: false, error }
+  throw r.error;
 }
 
-export async function waitForQuiet(pane: Pane, opts: WaitForQuietOptions): Promise<CaptureResult> {
-  return poll(pane, opts, (_cur, stableFor) => stableFor >= opts.ms, undefined);
+export async function waitForQuiet(pane: Pane, opts: WaitForQuietOptions & { throws: false }): Promise<WaitForResult>;
+export async function waitForQuiet(pane: Pane, opts: WaitForQuietOptions): Promise<CaptureResult>;
+export async function waitForQuiet(
+  pane: Pane, opts: WaitForQuietOptions,
+): Promise<CaptureResult | WaitForResult> {
+  const r = await poll(pane, opts, (_cur, stableFor) => stableFor >= opts.ms, undefined);
+  if (r.ok) return opts.throws === false ? r : r.result;
+  if (opts.throws === false) return r;
+  throw r.error;
 }

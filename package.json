@@ -1,6 +1,6 @@
 {
   "name": "@getpipher/term",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Programmatic tmux driver for the pi coding agent — spawn/drive a tmux session (send-keys, capture-pane, wait-for-pattern/quiet, resize, kill) for autonomous TUI QA. tmux-only v0.1; lib + pi extension.",
   "keywords": ["pi-package", "pi-extension", "tmux", "programmatic-terminal", "qa", "automation", "tui", "testing"],
   "license": "MIT",

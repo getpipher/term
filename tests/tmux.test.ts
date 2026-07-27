@@ -145,9 +145,10 @@ test("spawn: window-mode → new-window in current session + resize + register",
   assert.ok(newWin.some((a, i) => a === "-t" && newWin[i + 1] === "user-sess"));
   assert.ok(newWin.some((a, i) => a === "-P" && newWin[i + 1] === "-F" && newWin[i + 2] === "#{window_id}|#{pane_id}"));
   assert.ok(newWin.includes("pi") && newWin.includes("--no-banner"));
-  // resize applied to the new pane
-  const rsz = calls.find((c) => c[0] === "resize-pane")!;
-  assert.deepEqual(rsz, ["resize-pane", "-t", "%42", "-x", "100", "-y", "30"]);
+  // resize-window applied to the new window (not resize-pane — the attached
+  // client forces pane size; resize-window sets the window directly)
+  const rsz = calls.find((c) => c[0] === "resize-window")!;
+  assert.deepEqual(rsz, ["resize-window", "-t", "@9", "-x", "100", "-y", "30"]);
   lifecycle.unregister("%42");
 });
 test("spawn: window-mode rejects malformed new-window output", async () => {

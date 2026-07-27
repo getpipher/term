@@ -39,8 +39,10 @@ QA. See `docs/superpowers/specs/2026-07-22-term-design.md` for the full design.
   `inTmuxFn` seam for tests): new window in the current session if pi is inside
   tmux, else a new detached session (the v0.1 fallback). Window-mode uses
   `new-window -d -P -F '#{window_id}|#{pane_id}'` (NOT `\t` — tmux `-F` prints
-  literal `\t`, verified against real tmux) + an explicit `resize-pane` (since
-  `new-window -x/-y` is unreliable across tmux versions). `kill` branches:
+  literal `\t`, verified against real tmux) + an explicit `resize-window -t
+  <window_id>` (NOT `resize-pane` — the session's attached client forces pane
+  size to the client terminal; `resize-window` sets the window size directly and
+  sticks). `kill` branches:
   `kill-window -t <window_id>` for window-mode, `kill-session` for session-mode.
 - **Never-kill-attached** — `kill()` on a pane the tool didn't spawn is a
   no-op. Only panes registered via `spawn` are eligible for lease/exit

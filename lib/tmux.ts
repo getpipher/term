@@ -105,8 +105,10 @@ export async function spawn(spec?: SpawnSpec): Promise<SpawnResult> {
     // separator. window_id (@N) and pane_id (%N) never contain `|`.
     const [windowId, pane] = raw.trim().split("|");
     if (!windowId || !pane) throw new Error(`term spawn (window-mode): unexpected new-window output: ${JSON.stringify(raw)}`);
-    // new-window doesn't reliably honor -x/-y across tmux versions; resize explicitly.
-    await exec(["resize-pane", "-t", pane, "-x", String(w), "-y", String(h)]);
+    // resize-window (not resize-pane): the window shares the session's attached
+    // client, which forces all windows to the client size. resize-window sets the
+    // window size directly (pane fills it). resize-pane would be overridden.
+    await exec(["resize-window", "-t", windowId, "-x", String(w), "-y", String(h)]);
     lifecycle.register(pane, session, { mode: "window", window: windowId });
     return { pane, session, mode: "window", window: windowId, windowName };
   }

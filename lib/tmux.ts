@@ -1,4 +1,4 @@
-import type { Pane, NamedKey, CaptureResult, SpawnSpec, WaitForOptions, WaitForQuietOptions, WaitForResult } from "./types.ts";
+import type { Pane, NamedKey, CaptureResult, SpawnSpec, SpawnResult, WaitForOptions, WaitForQuietOptions, WaitForResult } from "./types.ts";
 import { TermTimeoutError } from "./error.ts";
 import * as lifecycle from "./lifecycle.ts";
 
@@ -7,7 +7,13 @@ export type ExecFn = (args: string[]) => Promise<string>;
 let exec: ExecFn = defaultTmuxExec;
 export function setExec(fn: ExecFn): void { exec = fn; }
 
-async function defaultTmuxExec(args: string[]): Promise<string> {
+// in-tmux detection seam — true when pi is itself running inside tmux.
+// Default reads $TMUX (set by tmux for every process it spawns). Tests inject
+// a stub to exercise window-mode without mutating process.env.
+let inTmuxFn: () => boolean = () => !!process.env.TMUX;
+export function setInTmux(fn: () => boolean): void { inTmuxFn = fn; }
+
+export async function defaultTmuxExec(args: string[]): Promise<string> {
   const { spawn } = await import("node:child_process");
   return new Promise((resolve, reject) => {
     const p = spawn("tmux", args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -71,24 +77,49 @@ export async function capture(pane: Pane, opts?: { ansi?: boolean }): Promise<Ca
 }
 
 // --- spawn / attach / resize / kill ------------------------------------------
-function randomSession(): string {
-  return `pi-term-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
-}
+function randomSuffix(): string { return Math.random().toString(36).slice(2, 8); }
 
-export async function spawn(spec?: SpawnSpec): Promise<{ pane: Pane; session: string }> {
-  const session = randomSession();
+// `spawn` auto-detects its target via $TMUX:
+//  - pi inside tmux  → new detached WINDOW in the current session (mode: "window").
+//    Detached (-d) so the user's active window keeps focus; the new window is
+//    reachable via `prefix + <n>`. windowName gets a rand suffix for uniqueness
+//    within the shared session (concurrent QA runs don't collide, and kill can
+//    target the stable window_id).
+//  - pi outside tmux → new detached SESSION (mode: "session", the v0.1 fallback).
+export async function spawn(spec?: SpawnSpec): Promise<SpawnResult> {
   const cmd = spec?.command ?? process.env.SHELL ?? "zsh";
   const args = spec?.args ?? [];
   const w = spec?.width ?? 120;
   const h = spec?.height ?? 40;
-  const win = spec?.windowName ?? "pi-term";
-  const newArgs = ["new-session", "-d", "-s", session, "-x", String(w), "-y", String(h), "-n", win];
+  const baseName = spec?.windowName ?? "pi-term";
+
+  if (inTmuxFn()) {
+    // window-mode: new window in pi's current session.
+    const session = (await exec(["display-message", "-p", "#{session_name}"])).trim();
+    const windowName = `${baseName}-${randomSuffix()}`;
+    const newArgs = ["new-window", "-d", "-t", session, "-n", windowName, "-P", "-F", "#{window_id}|#{pane_id}"];
+    if (spec?.cwd) newArgs.push("-c", spec.cwd);
+    newArgs.push(cmd, ...args);
+    const raw = await exec(newArgs);
+    // tmux -F does NOT interpret \t (prints literal backslash-t); use `|` as the
+    // separator. window_id (@N) and pane_id (%N) never contain `|`.
+    const [windowId, pane] = raw.trim().split("|");
+    if (!windowId || !pane) throw new Error(`term spawn (window-mode): unexpected new-window output: ${JSON.stringify(raw)}`);
+    // new-window doesn't reliably honor -x/-y across tmux versions; resize explicitly.
+    await exec(["resize-pane", "-t", pane, "-x", String(w), "-y", String(h)]);
+    lifecycle.register(pane, session, { mode: "window", window: windowId });
+    return { pane, session, mode: "window", window: windowId, windowName };
+  }
+
+  // session-mode: new detached session (pi not running inside tmux).
+  const session = `pi-term-${process.pid}-${randomSuffix()}`;
+  const newArgs = ["new-session", "-d", "-s", session, "-x", String(w), "-y", String(h), "-n", baseName];
   if (spec?.cwd) newArgs.push("-c", spec.cwd);
   newArgs.push(cmd, ...args);
   await exec(newArgs);
   const pane = (await exec(["display-message", "-t", session, "-p", "#{pane_id}"])).trim();
-  lifecycle.register(pane, session);
-  return { pane, session };
+  lifecycle.register(pane, session, { mode: "session" });
+  return { pane, session, mode: "session", windowName: baseName };
 }
 
 export async function attach(pane: Pane): Promise<{ pane: Pane; session: string }> {
@@ -100,10 +131,16 @@ export async function resize(pane: Pane, width: number, height: number): Promise
   await exec(["resize-pane", "-t", pane, "-x", String(width), "-y", String(height)]);
 }
 
+// kill tears down what spawn created: the window (window-mode) or the whole
+// session (session-mode). No-op on panes we didn't spawn (never-kill-attached).
 export async function kill(pane: Pane): Promise<void> {
-  const session = lifecycle.getSession(pane);
-  if (!session) return; // never-kill-attached
-  await exec(["kill-session", "-t", session]);
+  const entry = lifecycle.getEntry(pane);
+  if (!entry) return;
+  if (entry.mode === "window" && entry.window) {
+    await exec(["kill-window", "-t", entry.window]);
+  } else {
+    await exec(["kill-session", "-t", entry.session]);
+  }
   lifecycle.unregister(pane);
 }
 

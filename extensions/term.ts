@@ -3,26 +3,34 @@ import { Type } from "typebox";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { dispatchAction, type TermInput } from "../lib/dispatch.ts";
 import { TermTimeoutError } from "../lib/error.ts";
+import { defaultTmuxExec } from "../lib/tmux.ts";
+import * as lifecycle from "../lib/lifecycle.ts";
 
 const ACTIONS = ["spawn", "attach", "send", "sendKey", "capture", "waitFor", "waitForQuiet", "resize", "kill"] as const;
 
 export default function termExtension(pi: ExtensionAPI): void {
+  // Wire the lease reaper's exec to the real tmux exec. lifecycle.ts owns the
+  // reaper but can't import tmux.ts (cycle: tmux.ts imports lifecycle), so the
+  // extension — the composition root — wires it once at load. Without this the
+  // reaper/exit-hooks would no-op in production and idle windows/sessions
+  // would leak (the v0.4.0 no-kill default relies on the reaper actually killing).
+  lifecycle.setReapExec(defaultTmuxExec);
   pi.on("session_start", () => {});
   pi.on("session_shutdown", () => {});
   pi.registerTool({
     name: "term",
     label: "Terminal (tmux)",
-    description: "Programmatic tmux driver for autonomous TUI QA — spawn/drive a tmux session: send keystrokes, capture pane content, wait for a render pattern or render-quiet, resize, and tear down. tmux-only. Actions: spawn, attach, send, sendKey, capture, waitFor, waitForQuiet, resize, kill.",
+    description: "Programmatic tmux driver for autonomous TUI QA — spawn/drive a tmux session: send keystrokes, capture pane content, wait for a render pattern or render-quiet, resize, and tear down. tmux-only. Actions: spawn, attach, send, sendKey, capture, waitFor, waitForQuiet, resize, kill. spawn auto-detects: if pi is running inside tmux it opens a new detached window in the current session (focus stays with the user); otherwise it opens a new detached session.",
     promptSnippet: "Drive a tmux session programmatically for autonomous TUI QA (send text, send named keys, capture, wait for a pattern, kill)",
     promptGuidelines: [
-      "Use `term` to spawn an isolated tmux session running a TUI app (e.g. `pi`), drive it, wait for a render pattern or render-quiet, capture the pane, and kill the session when done.",
-      "`spawn` returns a `pane` id; pass that `pane` to all later actions. `kill` on a pane you didn't spawn is a safe no-op.",
+      "Use `term` to spawn a tmux window/session running a TUI app (e.g. `pi`), drive it, wait for a render pattern or render-quiet, and capture the pane. `spawn` auto-detects: if pi is inside tmux it opens a new detached window in the current session (your focus is preserved — reach it via `prefix + <n>`); otherwise it opens a new detached session.",
+      "`spawn` returns a `pane` id plus `mode`/`window`/`session`/`windowName`; pass that `pane` to all later actions. `kill` on a pane you didn't spawn is a safe no-op. DEFAULT: do NOT call `kill` at the end of a run — leave the window/session so the user can inspect the final TUI state (the lease reaper cleans up idle ones: 30 min session-mode, 2 h window-mode). Report the `windowName` (or `session` for detached) in your final message so the user can switch to it. Call `kill` only on explicit cleanup request or a clearly failed run.",
       "Use `send` to type LITERAL text (it types exactly what you give it — no escape codes). Use `sendKey` to press a named key (Enter, Escape, Tab, Up/Down/Left/Right, C-c, F1-F4, …). To submit a command, call `send` with the text then `sendKey` with Enter.",
       "For TUI QA, prefer `waitFor` with a pattern AND `quietMs` (e.g. 300) so a pattern that flashes mid-render then vanishes doesn't match transiently.",
       "`waitFor` throws a timeout error on timeout — the tool returns it as an `isError` result with the last capture for debugging. Catch it (or retry with a longer timeout).",
     ],
     parameters: Type.Object({
-      action: StringEnum([...ACTIONS], { description: "Operation to perform. `spawn` creates a fresh namespaced tmux session; `attach` references an existing pane; the rest operate on a `pane`." }),
+      action: StringEnum([...ACTIONS], { description: "Operation to perform. `spawn` opens a new detached window in the current tmux session if pi is inside tmux, else a new detached session; returns a `pane` id. `attach` references an existing pane; the rest operate on a `pane`." }),
       spawn: Type.Optional(Type.Object({
         command: Type.Optional(Type.String({ description: "Program to run. Default $SHELL (or zsh). e.g. \"pi\"." })),
         args: Type.Optional(Type.Array(Type.String())),
@@ -30,8 +38,8 @@ export default function termExtension(pi: ExtensionAPI): void {
         env: Type.Optional(Type.Record(Type.String(), Type.String())),
         width: Type.Optional(Type.Number({ description: "Cols. Default 120." })),
         height: Type.Optional(Type.Number({ description: "Rows. Default 40." })),
-        windowName: Type.Optional(Type.String({ description: "Default \"pi-term\"." })),
-      }, { description: "Used with action: spawn." })),
+        windowName: Type.Optional(Type.String({ description: "Default \"pi-term\". Window-mode appends a rand suffix for uniqueness within the current session." })),
+      }, { description: "Used with action: spawn. Auto-detects window-in-current-session (pi inside tmux) vs new detached session (pi outside tmux)." })),
       pane: Type.Optional(Type.String({ description: "Pane id (from spawn/attach, or $TMUX_PANE). Required for all actions except spawn." })),
       keys: Type.Optional(Type.String({ description: "Used with action: send. LITERAL text to type — sent verbatim via `tmux send-keys -l`; no escape codes are interpreted. Use the `sendKey` action to press Enter/Esc/arrows/control keys." })),
       key: Type.Optional(Type.String({ description: "Used with action: sendKey. Named key: Enter, Escape, Tab, Space, BS, Up, Down, Left, Right, C-c, C-d, C-z, C-\\, F1-F4." })),

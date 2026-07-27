@@ -1,6 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { setExec, sendKeys, sendKey, capture, spawn, attach, resize, kill } from "../lib/tmux.ts";
+import { setExec, setInTmux, sendKeys, sendKey, capture, spawn, attach, resize, kill } from "../lib/tmux.ts";
 import * as lifecycle from "../lib/lifecycle.ts";
 
 let calls: string[][] = [];
@@ -9,6 +9,7 @@ let stdout: string = "";
 beforeEach(() => {
   calls = [];
   stdout = "";
+  setInTmux(() => false);  // default: session-mode (deterministic for legacy tests)
   lifecycle.setReapExec(async () => "");
   setExec(async (args) => { calls.push(args); return stdout; });
 });
@@ -119,4 +120,72 @@ test("kill: spawned pane → kill-session + unregister", async () => {
 test("kill: attached pane (not spawned) → no-op", async () => {
   await kill("%99");
   assert.deepEqual(calls, []);
+});
+
+// --- spawn: window-mode (v0.4.0 — pi inside tmux) --------------------------
+test("spawn: window-mode → new-window in current session + resize + register", async () => {
+  setInTmux(() => true);
+  setExec(async (args) => {
+    calls.push(args);
+    if (args[0] === "display-message" && args.includes("#{session_name}")) return "user-sess\n";
+    if (args[0] === "new-window") return "@9|%42\n";  // window_id|pane_id (tmux -F does not interpret \t)
+    if (args[0] === "resize-pane") return "";
+    return "";
+  });
+  const r = await spawn({ command: "pi", args: ["--no-banner"], width: 100, height: 30, windowName: "qa" });
+  assert.equal(r.pane, "%42");
+  assert.equal(r.session, "user-sess");
+  assert.equal(r.mode, "window");
+  assert.equal(r.window, "@9");
+  assert.match(r.windowName, /^qa-[a-z0-9]{6}$/);  // base-rand
+  assert.equal(lifecycle.isSpawned("%42"), true);
+  // new-window: detached, targets current session, prints window_id\tpane_id, runs the command
+  const newWin = calls.find((c) => c[0] === "new-window")!;
+  assert.ok(newWin.includes("-d"), "new-window must be detached (-d) so focus stays with the user");
+  assert.ok(newWin.some((a, i) => a === "-t" && newWin[i + 1] === "user-sess"));
+  assert.ok(newWin.some((a, i) => a === "-P" && newWin[i + 1] === "-F" && newWin[i + 2] === "#{window_id}|#{pane_id}"));
+  assert.ok(newWin.includes("pi") && newWin.includes("--no-banner"));
+  // resize applied to the new pane
+  const rsz = calls.find((c) => c[0] === "resize-pane")!;
+  assert.deepEqual(rsz, ["resize-pane", "-t", "%42", "-x", "100", "-y", "30"]);
+  lifecycle.unregister("%42");
+});
+test("spawn: window-mode rejects malformed new-window output", async () => {
+  setInTmux(() => true);
+  setExec(async (args) => {
+    calls.push(args);
+    if (args[0] === "display-message") return "user-sess\n";
+    if (args[0] === "new-window") return "garbage\n";  // no tab → can't parse
+    return "";
+  });
+  await assert.rejects(spawn({ command: "pi" }), /unexpected new-window output/);
+});
+test("spawn: session-mode fallback when not in tmux (preserves v0.1 behavior)", async () => {
+  setInTmux(() => false);
+  setExec(async (args) => {
+    calls.push(args);
+    if (args[0] === "new-session") return "";
+    if (args[0] === "display-message" && args.includes("#{pane_id}")) return "%7\n";
+    return "";
+  });
+  const r = await spawn({ command: "pi", windowName: "qa" });
+  assert.equal(r.mode, "session");
+  assert.equal(r.window, undefined);
+  assert.equal(r.windowName, "qa");  // no rand suffix in session-mode
+  assert.ok(r.session.startsWith("pi-term-"));
+  assert.ok(calls.some((c) => c[0] === "new-session"));
+  assert.equal(calls.some((c) => c[0] === "new-window"), false);
+  lifecycle.unregister("%7");
+});
+test("kill: window-mode spawned pane → kill-window -t <window_id>", async () => {
+  lifecycle.register("%7", "user-sess", { mode: "window", window: "@9" });
+  await kill("%7");
+  assert.deepEqual(calls, [["kill-window", "-t", "@9"]]);
+  assert.equal(lifecycle.isSpawned("%7"), false);
+});
+test("kill: window-mode without window id falls back to kill-session (defensive)", async () => {
+  // shouldn't happen in practice, but the branch must stay safe
+  lifecycle.register("%7", "user-sess", { mode: "window" });  // no window
+  await kill("%7");
+  assert.deepEqual(calls, [["kill-session", "-t", "user-sess"]]);
 });

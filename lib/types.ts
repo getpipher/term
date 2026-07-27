@@ -13,7 +13,20 @@ export interface SpawnSpec {
   env?: Record<string, string>;
   width?: number;              // cols, default 120
   height?: number;             // rows, default 40
-  windowName?: string;         // default "pi-term"
+  windowName?: string;         // default "pi-term"; window-mode appends a rand suffix for uniqueness
+}
+
+// `spawn` auto-detects its target via $TMUX:
+//  - pi inside tmux  → new detached WINDOW in the current session (mode: "window")
+//  - pi outside tmux → new detached SESSION (mode: "session", the v0.1 fallback)
+// `window` is the tmux window_id (@N) for window-mode; undefined for session-mode.
+// `windowName` is the human-facing name (window-mode: "<base>-<rand>"; session-mode: "<base>").
+export interface SpawnResult {
+  pane: Pane;
+  session: string;
+  mode: "session" | "window";
+  window?: string;
+  windowName: string;
 }
 
 export interface CaptureResult {

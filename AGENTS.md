@@ -8,7 +8,13 @@ QA. See `docs/superpowers/specs/2026-07-22-term-design.md` for the full design.
 
 ## Status
 
-- **v0.1.0** — shipped (2026-07-22). Implementation complete; CI publishes on v0.1.0 tag.
+- **v0.4.0** — shipped (2026-07-27). `spawn` auto-detects via `$TMUX`: new
+  detached window in the current session (pi inside tmux) or new detached
+  session (pi outside tmux). `kill` branches to `kill-window`/`kill-session`.
+  Default agent behavior: no-kill — leave the window/session for post-run
+  inspection (lease: 30 min session-mode, 2 h window-mode). CI publishes on
+  v0.4.0 tag.
+- **v0.1.0** — shipped (2026-07-22). Original tmux-only flat design.
 
 ## Conventions (inherited from ~/local-dev/getpipher/AGENTS.md)
 
@@ -29,17 +35,26 @@ QA. See `docs/superpowers/specs/2026-07-22-term-design.md` for the full design.
   `setExec()` test seam (mirrors `cursor/lib/focus/tmux.ts`). Tests mock the
   exec to assert exact tmux arg arrays; an integration smoke runs against real
   tmux (skip-when-absent) to avoid the mock-proves-my-assumption anti-pattern.
+- **`spawn` auto-detects target (v0.4.0)** — branches on `$TMUX` (via an
+  `inTmuxFn` seam for tests): new window in the current session if pi is inside
+  tmux, else a new detached session (the v0.1 fallback). Window-mode uses
+  `new-window -d -P -F '#{window_id}|#{pane_id}'` (NOT `\t` — tmux `-F` prints
+  literal `\t`, verified against real tmux) + an explicit `resize-pane` (since
+  `new-window -x/-y` is unreliable across tmux versions). `kill` branches:
+  `kill-window -t <window_id>` for window-mode, `kill-session` for session-mode.
 - **Never-kill-attached** — `kill()` on a pane the tool didn't spawn is a
-  no-op. Only `pi-term-<pid>-<rand>` sessions are eligible for lease/exit
-  reaping. The user's live session is never at risk.
-- **Lease** — 30-min default, refresh-on-activity, single `setInterval` reap
-  sweep (60s, `unref`ed). `process.on('exit'/'SIGINT'/'SIGTERM')` reaps all
-  spawned sessions best-effort.
+  no-op. Only panes registered via `spawn` are eligible for lease/exit
+  reaping. The user's live session/windows are never at risk.
+- **Lease** — session-mode 30 min, window-mode 2 h (generous — user may
+  inspect after the run); refresh-on-activity, single `setInterval` reap sweep
+  (60s, `unref`ed). `process.on('exit'/'SIGINT'/'SIGTERM')` reaps all spawned
+  windows/sessions best-effort (mode-aware: `kill-window` vs `kill-session`).
 - **`waitFor` throws** `TermTimeoutError` with `{pane, elapsed, timeout,
   pattern?, lastCapture}` — no silent failures (CIPHER standard).
-- **`sendKeys` tokenizer** (`parseKeys`) — splits embedded escapes (`\r`,
-  `\x1b[A`, `\x03`, …) into literal `-l` chunks + named-key tokens. The
-  fiddliest piece; table-driven unit tests.
+- **`sendKeys` is pure literal (v0.2.0)** — `send-keys -l` with no escape
+  interpretation. The v0.1.0 `parseKeys` tokenizer was removed (its textual-
+  escape handling didn't match the raw-byte mapping). Use `sendKey` for special
+  keys. Table-driven unit tests cover the literal path.
 
 ## Tool surface (v0.1)
 

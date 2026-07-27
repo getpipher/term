@@ -7,6 +7,7 @@ import * as lifecycle from "../lib/lifecycle.ts";
 let calls: string[][] = [];
 beforeEach(() => {
   calls = [];
+  tmux.setInTmux(() => false);  // default session-mode for legacy tests
   lifecycle.setReapExec(async () => "");
   tmux.setExec(async (args) => {
     calls.push(args);
@@ -21,6 +22,23 @@ test("tool: spawn → {pane, session}", async () => {
   const r = await dispatchAction({ action: "spawn", spawn: { command: "pi" } });
   assert.equal((r as { pane: string }).pane, "%5");
   assert.ok(String((r as { session: string }).session).startsWith("pi-term-"));
+  assert.equal((r as { mode: string }).mode, "session");
+});
+
+test("tool: spawn window-mode → {pane, session, mode, window, windowName}", async () => {
+  tmux.setInTmux(() => true);
+  tmux.setExec(async (args) => {
+    calls.push(args);
+    if (args[0] === "display-message" && args.includes("#{session_name}")) return "pi-session\n";
+    if (args[0] === "new-window") return "@3|%8\n";
+    return "";
+  });
+  const r = await dispatchAction({ action: "spawn", spawn: { command: "pi", windowName: "qa" } });
+  assert.equal((r as { pane: string }).pane, "%8");
+  assert.equal((r as { session: string }).session, "pi-session");
+  assert.equal((r as { mode: string }).mode, "window");
+  assert.equal((r as { window: string }).window, "@3");
+  assert.match((r as { windowName: string }).windowName, /^qa-[a-z0-9]{6}$/);
 });
 
 test("tool: send → {ok:true} (v0.2.0: keys is literal)", async () => {

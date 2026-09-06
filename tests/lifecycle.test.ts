@@ -45,3 +45,15 @@ test("lifecycle: getEntry returns mode + window", () => {
   assert.equal(e?.window, "@3");
   assert.equal(e?.leaseMs, lifecycle.WINDOW_LEASE_MS);
 });
+
+// --- host-process safety (#2) ------------------------------------------------
+// ensureReaper() must not install signal handlers: as an in-process extension
+// it must not own the host's SIGINT/SIGTERM disposition or call process.exit
+// (omp's extension guard converts that to ExtensionExitError).
+test("lifecycle: register installs NO SIGINT/SIGTERM listeners (host owns signal disposition)", () => {
+  const int = process.listenerCount("SIGINT");
+  const term = process.listenerCount("SIGTERM");
+  lifecycle.register("%5", "pi-term-sig");
+  assert.equal(process.listenerCount("SIGINT"), int);
+  assert.equal(process.listenerCount("SIGTERM"), term);
+});

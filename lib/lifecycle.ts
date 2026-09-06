@@ -75,7 +75,11 @@ function ensureReaper(): void {
     for (const [, entry] of spawned) void reapExec(reapArgs(entry));
     spawned.clear();
   };
+  // Best-effort reap on normal host exit only. Deliberately NO SIGINT/SIGTERM
+  // listeners: as an in-process pi/omp extension, this module must not own the
+  // host's signal disposition or call process.exit (omp's guarded
+  // extension/hook loading turns that into ExtensionExitError — #2). A
+  // hard-killed host skips 'exit'; its spawned tmux sessions/windows survive,
+  // identifiable by name (pi-term-* / <windowName>), for the user to reap.
   process.on("exit", reapAll);
-  process.on("SIGINT", () => { reapAll(); process.exit(130); });
-  process.on("SIGTERM", () => { reapAll(); process.exit(143); });
 }

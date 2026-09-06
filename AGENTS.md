@@ -49,8 +49,11 @@ QA. See `docs/superpowers/specs/2026-07-22-term-design.md` for the full design.
   reaping. The user's live session/windows are never at risk.
 - **Lease** — session-mode 30 min, window-mode 2 h (generous — user may
   inspect after the run); refresh-on-activity, single `setInterval` reap sweep
-  (60s, `unref`ed). `process.on('exit'/'SIGINT'/'SIGTERM')` reaps all spawned
-  windows/sessions best-effort (mode-aware: `kill-window` vs `kill-session`).
+  (60s, `unref`ed). `process.on('exit')` reaps all spawned windows/sessions
+  best-effort (mode-aware: `kill-window` vs `kill-session`). v0.4.2: NO
+  SIGINT/SIGTERM listeners and never `process.exit` — in-host signal ownership
+  is forbidden (omp extension guard, #2); hard-killed hosts leak named,
+  user-reapable sessions instead.
 - **`waitFor` throws** `TermTimeoutError` with `{pane, elapsed, timeout,
   pattern?, lastCapture}` — no silent failures (CIPHER standard).
 - **`sendKeys` is pure literal (v0.2.0)** — `send-keys -l` with no escape

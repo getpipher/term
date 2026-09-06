@@ -101,6 +101,16 @@ test("spawn: defaults 120x40, windowName pi-term", async () => {
   assert.ok(newSess.some((a, i) => a === "-n" && newSess[i + 1] === "pi-term"));
   lifecycle.unregister("%1");
 });
+test("spawn: env vars are passed via -e KEY=value before the command (session-mode)", async () => {
+  setExec(async (args) => { calls.push(args); return args[0] === "display-message" && args.includes("#{pane_id}") ? "%3\n" : ""; });
+  await spawn({ command: "sh", env: { GPTERM_PROBE: "one", SECOND: "two words" } });
+  const newSess = calls.find((c) => c[0] === "new-session")!;
+  assert.ok(newSess.some((a, i) => a === "-e" && newSess[i + 1] === "GPTERM_PROBE=one"), "single var as -e KEY=value");
+  assert.ok(newSess.some((a, i) => a === "-e" && newSess[i + 1] === "SECOND=two words"), "value with space needs no escaping");
+  assert.ok(newSess.indexOf("-e") < newSess.indexOf("sh"), "-e options must precede the shell-command");
+  assert.ok(!newSess.some((a) => a.startsWith("GPTERM_PROBE,") || a.includes(",SECOND=")), "no comma-joined env list");
+  lifecycle.unregister("%3");
+});
 test("attach: validates pane + does NOT register", async () => {
   setExec(async (args) => { calls.push(args); return args[0] === "display-message" ? "pi-term-x\n" : ""; });
   const r = await attach("%9");
@@ -160,6 +170,20 @@ test("spawn: window-mode rejects malformed new-window output", async () => {
     return "";
   });
   await assert.rejects(spawn({ command: "pi" }), /unexpected new-window output/);
+});
+test("spawn: env vars are passed via -e KEY=value before the command (window-mode)", async () => {
+  setInTmux(() => true);
+  setExec(async (args) => {
+    calls.push(args);
+    if (args[0] === "display-message" && args.includes("#{session_name}")) return "user-sess\n";
+    if (args[0] === "new-window") return "@9|%42\n";
+    return "";
+  });
+  await spawn({ command: "sh", env: { GPTERM_PROBE: "one" } });
+  const newWin = calls.find((c) => c[0] === "new-window")!;
+  assert.ok(newWin.some((a, i) => a === "-e" && newWin[i + 1] === "GPTERM_PROBE=one"), "window-mode also forwards env");
+  assert.ok(newWin.indexOf("-e") < newWin.indexOf("sh"), "-e options must precede the shell-command");
+  lifecycle.unregister("%42");
 });
 test("spawn: session-mode fallback when not in tmux (preserves v0.1 behavior)", async () => {
   setInTmux(() => false);

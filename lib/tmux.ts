@@ -99,6 +99,9 @@ export async function spawn(spec?: SpawnSpec): Promise<SpawnResult> {
     const windowName = `${baseName}-${randomSuffix()}`;
     const newArgs = ["new-window", "-d", "-t", session, "-n", windowName, "-P", "-F", "#{window_id}|#{pane_id}"];
     if (spec?.cwd) newArgs.push("-c", spec.cwd);
+    // env: one -e KEY=value per var (tmux ≥3.2; repeated -e verified on 3.7 —
+    // no comma-list, so values with spaces/commas need no escaping).
+    for (const [k, v] of Object.entries(spec?.env ?? {})) newArgs.push("-e", `${k}=${v}`);
     newArgs.push(cmd, ...args);
     const raw = await exec(newArgs);
     // tmux -F does NOT interpret \t (prints literal backslash-t); use `|` as the
@@ -117,6 +120,7 @@ export async function spawn(spec?: SpawnSpec): Promise<SpawnResult> {
   const session = `pi-term-${process.pid}-${randomSuffix()}`;
   const newArgs = ["new-session", "-d", "-s", session, "-x", String(w), "-y", String(h), "-n", baseName];
   if (spec?.cwd) newArgs.push("-c", spec.cwd);
+  for (const [k, v] of Object.entries(spec?.env ?? {})) newArgs.push("-e", `${k}=${v}`);
   newArgs.push(cmd, ...args);
   await exec(newArgs);
   const pane = (await exec(["display-message", "-t", session, "-p", "#{pane_id}"])).trim();

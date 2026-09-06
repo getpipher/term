@@ -8,6 +8,10 @@ QA. See `docs/superpowers/specs/2026-07-22-term-design.md` for the full design.
 
 ## Status
 
+- **v0.4.2** — shipped (2026-09-07). Two fixes: reaper installs no
+  SIGINT/SIGTERM handlers and never calls `process.exit` (omp extension
+  guard compliance, #2); `spawn.env` now reaches the pane via `tmux -e
+  KEY=value` (≥3.2) in both modes (#1).
 - **v0.4.0** — shipped (2026-07-27). `spawn` auto-detects via `$TMUX`: new
   detached window in the current session (pi inside tmux) or new detached
   session (pi outside tmux). `kill` branches to `kill-window`/`kill-session`.
